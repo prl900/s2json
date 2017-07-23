@@ -6,22 +6,31 @@ import (
 )
 
 type S2Point struct {
-	Point s2.Point
+	s2.Point
 }
 
-type GeoJSONPoint struct {
+type geoJSONPoint struct {
 	Type   string    `json:"type"`
+	BBox   []float64 `json:"bbox,omitempty"`
 	Coords []float64 `json:"coordinates"`
+}
+
+func (p *S2Point) Coverage(maxLevel, maxCells int) []s2.CellID {
+	rc := &s2.RegionCoverer{MaxLevel: maxLevel, MaxCells: maxCells}
+	return rc.Covering(p.Point)
 }
 
 func (p *S2Point) MarshalJSON() ([]byte, error) {
 	lnglat := s2.LatLngFromPoint(p.Point)
-	gPoint := &GeoJSONPoint{"Point", []float64{lnglat.Lng.Degrees(), lnglat.Lat.Degrees()}}
+	lo := p.Point.RectBound().Lo().Normalized()
+	hi := p.Point.RectBound().Hi().Normalized()
+	gPoint := &geoJSONPoint{"Point", []float64{lo.Lng.Degrees(), lo.Lat.Degrees(), hi.Lng.Degrees(), hi.Lat.Degrees()},
+		[]float64{lnglat.Lng.Degrees(), lnglat.Lat.Degrees()}}
 	return json.Marshal(gPoint)
 }
 
 func (p *S2Point) UnmarshalJSON(in []byte) error {
-	pView := &GeoJSONPoint{}
+	pView := &geoJSONPoint{}
 	err := json.Unmarshal(in, pView)
 	if err != nil {
 		return err

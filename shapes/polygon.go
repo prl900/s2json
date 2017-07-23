@@ -6,16 +6,24 @@ import (
 )
 
 type S2Polygon struct {
-	Polygon s2.Polygon
+	s2.Polygon
 }
 
-type GeoJSONPolygon struct {
+type geoJSONPolygon struct {
 	Type   string        `json:"type"`
+	BBox   []float64     `json:"bbox,omitempty"`
 	Coords [][][]float64 `json:"coordinates"`
+}
+
+func (p *S2Polygon) Coverage(maxLevel, maxCells int) []s2.CellID {
+	rc := &s2.RegionCoverer{MaxLevel: maxLevel, MaxCells: maxCells}
+	return rc.InteriorCellUnion(p.Polygon.Loops()[0])
 }
 
 func (p *S2Polygon) MarshalJSON() ([]byte, error) {
 	plnglats := [][][]float64{}
+	lo := p.Polygon.RectBound().Lo().Normalized()
+	hi := p.Polygon.RectBound().Hi().Normalized()
 	for _, loop := range p.Polygon.Loops() {
 		lnglats := [][]float64{}
 		for _, point := range loop.Vertices() {
@@ -25,12 +33,13 @@ func (p *S2Polygon) MarshalJSON() ([]byte, error) {
 		plnglats = append(plnglats, lnglats)
 	}
 
-	gP := &GeoJSONPolygon{"Polygon", plnglats}
+	gP := &geoJSONPolygon{"Polygon", []float64{lo.Lng.Degrees(), lo.Lat.Degrees(), hi.Lng.Degrees(), hi.Lat.Degrees()}, plnglats}
 	return json.Marshal(gP)
 }
 
 func (p *S2Polygon) UnmarshalJSON(in []byte) error {
-	pView := &GeoJSONPolygon{}
+	pView := &geoJSONPolygon{}
+
 	err := json.Unmarshal(in, pView)
 	if err != nil {
 		return err
@@ -47,8 +56,7 @@ func (p *S2Polygon) UnmarshalJSON(in []byte) error {
 		loops = append(loops, loop)
 	}
 
-	s2p := s2.PolygonFromLoops(loops)
-	*p = S2Polygon{*s2p}
+	*p = S2Polygon{*s2.PolygonFromLoops(loops)}
 
 	return err
 }
